@@ -61,6 +61,7 @@ display(dbutils.fs.ls(raw_path))
 
 # COMMAND ----------
 
+# observe format of data
 print(dbutils.fs.head(
   dbutils.fs.ls(raw_path)[0].path
 ))
@@ -81,6 +82,7 @@ raw_movie_data_df = (
 raw_movie_data_df = raw_movie_data_df.select(
     explode("movie").alias("value")  # address nested format
 )
+raw_movie_data_df.count()  # check number of records
 
 # COMMAND ----------
 
@@ -106,7 +108,7 @@ display(raw_movie_data_df)
 
 # COMMAND ----------
 
-raw_movie_data_df = raw_movie_data_df.select(
+bronze_movie_data_df = raw_movie_data_df.select(
     "value",
     lit(f"{raw_path}").alias("datasource"),
     current_timestamp().alias("ingesttime"),
@@ -123,18 +125,17 @@ raw_movie_data_df = raw_movie_data_df.select(
 # COMMAND ----------
 
 (
- raw_movie_data_df.select(
- "datasource",
- "ingesttime",
- "value",
- "status",
- col("ingestdate").alias("p_ingestdate")
- )
- .write
- .format("delta")
- .mode("append")
- .partitionBy("p_ingestdate")
- .save(bronze_path)
+bronze_movie_data_df.select(
+    "datasource",
+    "ingesttime",
+    "value",
+    "status",
+    col("ingestdate").alias("p_ingestdate"))
+.write
+.format("delta")
+.mode("append")
+.partitionBy("p_ingestdate")
+.save(bronze_path)
 )
 
 # COMMAND ----------
