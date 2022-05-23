@@ -15,27 +15,7 @@ from pyspark.sql.functions import col, current_timestamp, explode, lit, to_json
 
 # COMMAND ----------
 
-username = "nathan"
-
-# COMMAND ----------
-
-project_pipeline_path = f"/antrasep/{username}/"
-
-#raw_path = project_pipeline_path + "raw/"
-bronze_path = project_pipeline_path + "bronze/"
-silver_path = project_pipeline_path + "silver/"
-silver_quarantine_path = project_pipeline_path + "silver_quarantine/"
-
-# COMMAND ----------
-
-# MAGIC %md
-# MAGIC 
-# MAGIC ### Configure Database
-
-# COMMAND ----------
-
-spark.sql(f"CREATE DATABASE IF NOT EXISTS antrasep_{username}")
-spark.sql(f"USE antrasep_{username}")
+# MAGIC %run ./includes/configuration
 
 # COMMAND ----------
 

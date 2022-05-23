@@ -17,27 +17,7 @@ from pyspark.sql.types import ArrayType, DateType, DoubleType, IntegerType, Stri
 
 # COMMAND ----------
 
-username = "nathan"
-
-# COMMAND ----------
-
-project_pipeline_path = f"/antrasep/{username}/"
-
-#raw_path = project_pipeline_path + "raw/"
-bronze_path = project_pipeline_path + "bronze/"
-silver_path = project_pipeline_path + "silver/"
-silver_quarantine_path = project_pipeline_path + "silver_quarantine/"
-
-# COMMAND ----------
-
-# MAGIC %md
-# MAGIC 
-# MAGIC ### Configure Database
-
-# COMMAND ----------
-
-spark.sql(f"CREATE DATABASE IF NOT EXISTS antrasep_{username}")
-spark.sql(f"USE antrasep_{username}")
+# MAGIC %run ./includes/configuration
 
 # COMMAND ----------
 
@@ -253,7 +233,7 @@ silver_movie_data_df.select("OriginalLanguage").distinct().count()
 # original languages lookup table
 original_languages_lookup = (
     silver_movie_data_df.select(
-        lit("1").alias("id"),
+        lit(1).alias("id"),
         lit("English").alias("language"))
     .distinct()
 )
@@ -289,7 +269,7 @@ silver_movie_data_df = silver_movie_data_df.select(
     col("CreatedDate").alias("created_time"),
     col("Id").alias("movie_id"),
     col("ImdbUrl").alias("imdb_url"),
-    lit("1").alias("original_language_id"),  # foreign key to original languages lookup table
+    lit(1).alias("original_language_id"),  # foreign key to original languages lookup table
     col("Overview").alias("overview"),
     col("PosterUrl").alias("poster_url"),
     col("Price").alias("price"),
