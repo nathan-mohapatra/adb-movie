@@ -88,7 +88,7 @@ spark.sql(
 )
 
 update_bronze_table_status(spark, clean_silver_movie_data_df, "loaded")
-update_bronze_table_status(spark, clean_silver_movie_data_df, "quarantined")
+update_bronze_table_status(spark, quarantine_silver_movie_data_df, "quarantined")
 
 # COMMAND ----------
 
@@ -114,31 +114,8 @@ quarantine_bronze_movie_data_df = spark.read.table("movie_bronze").where("status
 
 # COMMAND ----------
 
-augmented_quarantine_bronze_movie_data_df = quarantine_bronze_movie_data_df.withColumn(
-    "nested_json", from_json(col("value"), json_schema)
-)
-
-quarantine_silver_movie_data_df = augmented_quarantine_bronze_movie_data_df.select("value", "nested_json.*")
-
-quarantine_silver_movie_data_df = quarantine_silver_movie_data_df.select(
-    "value",
-    col("BackdropUrl").alias("backdrop_url"),
-    col("Budget").alias("budget"),
-    col("CreatedDate").alias("created_time"),
-    col("Id").alias("movie_id"),
-    col("ImdbUrl").alias("imdb_url"),
-    lit(1).alias("original_language_id"),
-    col("Overview").alias("overview"),
-    col("PosterUrl").alias("poster_url"),
-    col("Price").alias("price"),
-    col("ReleaseDate").alias("release_date"),
-    col("Revenue").alias("revenue"),
-    col("RunTime").alias("runtime"),
-    col("Tagline").alias("tagline"),
-    col("Title").alias("title"),
-    col("TmdbUrl").alias("tmdb_url"),
-    col("genres.id").alias("genre_id")
-).dropDuplicates(["value"])
+quarantine_silver_movie_data_df = transform_bronze(quarantine_bronze_movie_data_df)
+quarantine_silver_movie_data_df = refactor_silver(quarantine_silver_movie_data_df)
 
 display(quarantine_silver_movie_data_df)
 
@@ -178,55 +155,18 @@ display(repaired_under_budget)
 
 # COMMAND ----------
 
-(
-repaired_neg_runtime.drop("value")
-    .write
-    .format("delta")
-    .mode("append")
-    .save(silver_path)
+bronze_to_silver_writer = batch_writer(
+    df=repaired_neg_runtime, exclude_columns=["value"]
 )
+bronze_to_silver_writer.save(silver_path)
 
-# COMMAND ----------
-
-augmented_repaired_neg_runtime = (
-    repaired_neg_runtime.withColumn("status", lit("loaded"))
+bronze_to_silver_writer = batch_writer(
+    df=repaired_under_budget, exclude_columns=["value"]
 )
+bronze_to_silver_writer.save(silver_path)
 
-update_match = "bronze.value = repair.value"
-update = {"status": "repair.status"}
-
-(
-    bronze_table.alias("bronze")
-    .merge(augmented_repaired_neg_runtime.alias("repair"), update_match)
-    .whenMatchedUpdate(set=update)
-    .execute()
-)
-
-# COMMAND ----------
-
-(
-repaired_under_budget.drop("value")
-    .write
-    .format("delta")
-    .mode("append")
-    .save(silver_path)
-)
-
-# COMMAND ----------
-
-augmented_repaired_under_budget = (
-    repaired_under_budget.withColumn("status", lit("loaded"))
-)
-
-update_match = "bronze.value = repair.value"
-update = {"status": "repair.status"}
-
-(
-    bronze_table.alias("bronze")
-    .merge(augmented_repaired_under_budget.alias("repair"), update_match)
-    .whenMatchedUpdate(set=update)
-    .execute()
-)
+update_bronze_table_status(spark, repaired_neg_runtime, "loaded")
+update_bronze_table_status(spark, repaired_under_budget, "loaded")
 
 # COMMAND ----------
 

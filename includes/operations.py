@@ -214,15 +214,15 @@ def get_lookup_table(silver_df: DataFrame, table_type: str) -> DataFrame:
 
 # COMMAND ----------
 
-def refactor_dataframe(df: DataFrame) -> DataFrame:
+def refactor_silver(silver_df: DataFrame) -> DataFrame:
     """
     Rename columns, set foreign keys, remove duplicates
     
-    :df: Dataframe
-    :return: Refactored dataframe
+    :silver_df: Silver dataframe
+    :return: Refactored silver dataframe
     """
     
-    return df.select(
+    return silver_df.select(
         "value",
         col("BackdropUrl").alias("backdrop_url"),
         col("Budget").alias("budget"),
