@@ -49,107 +49,33 @@ spark.sql(
 
 # MAGIC %md
 # MAGIC 
-# MAGIC ## Bronze to Silver
+# MAGIC ## Bronze to Silver  
+# MAGIC Hardened Logic:
 
 # COMMAND ----------
 
 dbutils.fs.rm(silver_path, recurse=True)
 
-bronze_movie_data_df = spark.read.table("movie_bronze").where("status = 'new'")
+bronze_movie_data_df = read_batch_bronze()
 
-json_schema = StructType([
-    StructField("BackdropUrl", StringType(), True),
-    StructField("Budget", DoubleType(), True),
-    StructField("CreatedDate", TimestampType(), True),
-    StructField("Id", IntegerType(), True),
-    StructField("ImdbUrl", StringType(), True),
-    StructField("OriginalLanguage", StringType(), True),
-    StructField("Overview", StringType(), True),
-    StructField("PosterUrl", StringType(), True),
-    StructField("Price", DoubleType(), True),
-    StructField("ReleaseDate", DateType(), True),
-    StructField("Revenue", DoubleType(), True),
-    StructField("RunTime", IntegerType(), True),
-    StructField("Tagline", StringType(), True),
-    StructField("Title", StringType(), True),
-    StructField("TmdbUrl", StringType(), True),
-    StructField("genres", ArrayType(StructType([
-        StructField("id", IntegerType(), True),
-        StructField("name", StringType(), True)
-    ])), True)
-])
+silver_movie_data_df = transform_bronze(bronze_movie_data_df)
 
-augmented_bronze_movie_data_df = bronze_movie_data_df.withColumn(
-    "nested_json", from_json(col("value"), json_schema)
-)
-
-silver_movie_data_df = augmented_bronze_movie_data_df.select("value", "nested_json.*")
-
-genres_lookup = (
-    silver_movie_data_df
-    .withColumn("genres", explode(col("genres")))
-    .agg(collect_set("genres").alias("distinct_genres"))
-)
-
-genres_lookup = genres_lookup.select(
-    explode("distinct_genres").alias("distinct_genres")
-)
-
-genres_lookup = (
-    genres_lookup
-    .select(
-        col("distinct_genres.id").alias("id"),
-        col("distinct_genres.name").alias("name"))
-    .where("name != ''")
-    .orderBy(col("id").asc())
-)
-
+genres_lookup = get_lookup_table(silver_movie_data_df, "genres")
 genres_lookup.createOrReplaceTempView("genres_lookup")
 
-original_languages_lookup = (
-    silver_movie_data_df.select(
-        lit(1).alias("id"),
-        lit("English").alias("language"))
-    .distinct()
-)
-
+original_languages_lookup = get_lookup_table(silver_movie_data_df, "original_languages")
 original_languages_lookup.createOrReplaceTempView("original_languages_lookup")
 
-silver_movie_data_df = silver_movie_data_df.select(
-    "value",
-    col("BackdropUrl").alias("backdrop_url"),
-    col("Budget").alias("budget"),
-    col("CreatedDate").alias("created_time"),
-    col("Id").alias("movie_id"),
-    col("ImdbUrl").alias("imdb_url"),
-    lit(1).alias("original_language_id"),
-    col("Overview").alias("overview"),
-    col("PosterUrl").alias("poster_url"),
-    col("Price").alias("price"),
-    col("ReleaseDate").alias("release_date"),
-    col("Revenue").alias("revenue"),
-    col("RunTime").alias("runtime"),
-    col("Tagline").alias("tagline"),
-    col("Title").alias("title"),
-    col("TmdbUrl").alias("tmdb_url"),
-    col("genres.id").alias("genre_id")
-).dropDuplicates(["value"])
+silver_movie_data_df = refactor_dataframe(silver_movie_data_df)
 
-clean_silver_movie_data_df = silver_movie_data_df.where(
-    (col("runtime") >= 0) & (col("budget") >= 1000000)
+clean_silver_movie_data_df, quarantine_silver_movie_data_df = (
+    generate_clean_and_quarantine_dataframes(silver_movie_data_df)
 )
 
-quarantine_silver_movie_data_df = silver_movie_data_df.where(
-    (col("runtime") < 0) | (col("budget") < 1000000)
+bronze_to_silver_writer = batch_writer(
+    df=clean_silver_movie_data_df
 )
-
-(
-clean_silver_movie_data_df.drop("value")
-    .write
-    .format("delta")
-    .mode("append")
-    .save(silver_path)
-)
+bronze_to_silver_writer.save(silver_path)
 
 spark.sql("DROP TABLE IF EXISTS movie_silver")
 
@@ -161,37 +87,8 @@ spark.sql(
     """
 )
 
-bronze_table = DeltaTable.forPath(spark, bronze_path)
-
-augmented_silver_movie_data_df = (
-    clean_silver_movie_data_df
-    .withColumn("status", lit("loaded"))
-)
-
-update_match = "bronze.value = clean.value"
-update = {"status": "clean.status"}
-
-(
-  bronze_table.alias("bronze")
-  .merge(augmented_silver_movie_data_df.alias("clean"), update_match)
-  .whenMatchedUpdate(set=update)
-  .execute()
-)
-
-augmented_silver_movie_data_df = (
-    quarantine_silver_movie_data_df
-    .withColumn("status", lit("quarantined"))
-)
-
-update_match = "bronze.value = quarantine.value"
-update = {"status": "quarantine.status"}
-
-(
-  bronze_table.alias("bronze")
-  .merge(augmented_silver_movie_data_df.alias("quarantine"), update_match)
-  .whenMatchedUpdate(set=update)
-  .execute()
-)
+update_bronze_table_status(spark, clean_silver_movie_data_df, "loaded")
+update_bronze_table_status(spark, clean_silver_movie_data_df, "quarantined")
 
 # COMMAND ----------
 
