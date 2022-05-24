@@ -1,7 +1,12 @@
 # Databricks notebook source
-# MAGIC %md
-# MAGIC 
-# MAGIC # Configuration
+# libraries
+from delta.tables import DeltaTable
+
+from pyspark.sql import DataFrame
+from pyspark.sql.functions import abs, col, collect_set, current_timestamp, explode, from_json, lit, to_json
+from pyspark.sql.types import ArrayType, DateType, DoubleType, IntegerType, StringType, StructField, StructType, TimestampType
+
+from typing import List
 
 # COMMAND ----------
 
@@ -20,7 +25,7 @@ silver_path = project_pipeline_path + "silver/"
 
 # MAGIC %md
 # MAGIC 
-# MAGIC ## Configure Database
+# MAGIC ### Configure Database
 
 # COMMAND ----------
 

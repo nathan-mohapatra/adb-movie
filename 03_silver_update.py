@@ -5,25 +5,20 @@
 
 # COMMAND ----------
 
-from delta.tables import DeltaTable
-from pyspark.sql.functions import abs, col, collect_set, current_timestamp, explode, from_json, lit, to_json
-from pyspark.sql.types import ArrayType, DateType, DoubleType, IntegerType, StringType, StructField, StructType, TimestampType
+# MAGIC %md
+# MAGIC 
+# MAGIC ## Hardened Logic (Configuration and Operations)
+
+# COMMAND ----------
+
+# MAGIC %run ./includes/operations
 
 # COMMAND ----------
 
 # MAGIC %md
 # MAGIC 
-# MAGIC ## Configuration
-
-# COMMAND ----------
-
-# MAGIC %run ./includes/configuration
-
-# COMMAND ----------
-
-# MAGIC %md
-# MAGIC 
-# MAGIC ## Raw to Bronze
+# MAGIC ## Raw to Bronze  
+# MAGIC Hardened Logic:
 
 # COMMAND ----------
 
@@ -31,42 +26,14 @@ dbutils.fs.rm(bronze_path, recurse=True)
 
 raw_path = "dbfs:/FileStore/raw"
 
-raw_movie_data_df = (
-     spark.read
-    .option("inferSchema", "true")
-    .option("multiline", "true")
-    .json(raw_path)
-)
+raw_movie_data_df = read_batch_raw(raw_path)
 
-raw_movie_data_df = raw_movie_data_df.select(
-    explode("movie").alias("value")
-)
+bronze_movie_data_df = transform_raw(raw_movie_data_df, raw_path)
 
-raw_movie_data_df = raw_movie_data_df.select(
-    to_json(col("value")).alias("value")
+raw_to_bronze_writer = batch_writer(
+    df=bronze_movie_data_df, partition_column="p_ingestdate"
 )
-
-bronze_movie_data_df = raw_movie_data_df.select(
-    "value",
-    lit(f"{raw_path}").alias("datasource"),
-    current_timestamp().alias("ingesttime"),
-    lit("new").alias("status"),
-    current_timestamp().cast("date").alias("ingestdate")
-)
-
-(
-bronze_movie_data_df.select(
-    "datasource",
-    "ingesttime",
-    "value",
-    "status",
-    col("ingestdate").alias("p_ingestdate"))
-.write
-.format("delta")
-.mode("append")
-.partitionBy("p_ingestdate")
-.save(bronze_path)
-)
+raw_to_bronze_writer.save(bronze_path)
 
 spark.sql("DROP TABLE IF EXISTS movie_bronze")
 

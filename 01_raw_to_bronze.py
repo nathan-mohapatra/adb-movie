@@ -5,10 +5,6 @@
 
 # COMMAND ----------
 
-from pyspark.sql.functions import col, current_timestamp, explode, lit, to_json
-
-# COMMAND ----------
-
 # MAGIC %md
 # MAGIC 
 # MAGIC ## Configuration
